@@ -1,0 +1,36 @@
+#!/bin/bash
+# Ashen Horde başlatıcı: sunucuyu arka planda açar, oyunu pencerede gösterir.
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+PORT=47821
+URL="http://127.0.0.1:$PORT/"
+
+# Node'u bul (Finder'dan açılan uygulamalarda PATH boştur)
+NODE=""
+for c in /opt/homebrew/bin/node /usr/local/bin/node "$HOME"/.nvm/versions/node/*/bin/node; do
+  [ -x "$c" ] && NODE="$c"
+done
+[ -z "$NODE" ] && NODE="$(command -v node)"
+if [ -z "$NODE" ]; then
+  osascript -e 'display dialog "Node.js bulunamadı. Lütfen nodejs.org adresinden kur." buttons {"Tamam"}'
+  exit 1
+fi
+export PATH="$(dirname "$NODE"):$PATH"
+
+cd "$DIR"
+# Gerekirse oyunu derle (dist yoksa ya da kaynaklar daha yeniyse)
+if [ ! -f dist/index.html ] || [ -n "$(find src index.html -newer dist/index.html -print -quit 2>/dev/null)" ]; then
+  [ -d node_modules ] && npm run build >/tmp/ashen-horde-build.log 2>&1
+fi
+if [ ! -f dist/index.html ]; then
+  osascript -e 'display dialog "Oyun derlenemedi. /tmp/ashen-horde-build.log dosyasına bak." buttons {"Tamam"}'
+  exit 1
+fi
+
+# Sunucu zaten çalışmıyorsa başlat
+if ! curl -s -o /dev/null "$URL"; then
+  nohup "$NODE" "$DIR/launcher/serve.mjs" "$DIR/dist" $PORT >/tmp/ashen-horde.log 2>&1 &
+  for i in 1 2 3 4 5 6 7 8 9 10; do sleep 0.3; curl -s -o /dev/null "$URL" && break; done
+fi
+
+# Varsayılan tarayıcıda aç (en güvenilir yol)
+open "$URL"

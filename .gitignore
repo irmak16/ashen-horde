@@ -1,0 +1,7 @@
+node_modules/
+dist/
+_tmp/
+.DS_Store
+.write_test
+LootStrike_Originals/
+LootStrike_Assets/
