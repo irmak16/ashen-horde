@@ -217,3 +217,14 @@ kbd { font-family: var(--display); font-size: 14px; border: 1px solid var(--gold
 #bossptr::before { content: ''; position: absolute; left: -16px; top: -14px; width: 34px; height: 28px; background: #ff3b4a;
   clip-path: polygon(0 0, 100% 50%, 0 100%, 22% 50%); filter: drop-shadow(0 0 8px rgba(255,40,60,0.9)) drop-shadow(0 2px 0 #000); animation: bossptr 0.9s ease-in-out infinite alternate; }
 @keyframes bossptr { from { opacity: 0.55; } to { opacity: 1; } }
+
+.pbars { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; }
+.pbar { position: relative; height: 24px; border: 1.5px solid var(--gold2); border-radius: 4px; background: #0e0b16; overflow: hidden; box-shadow: inset 0 0 8px rgba(0,0,0,0.7); }
+.pbar .fill { position: absolute; inset: 0 auto 0 0; }
+.pbar.hp .fill { background: linear-gradient(#e0405a, #8e1c33); }
+.pbar.xp .fill { background: linear-gradient(#6fb6ff, #2a5fb0); }
+.pbar span { position: relative; display: block; text-align: center; line-height: 21px; font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: 0.1em; color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
+
+/* ── Silah bekleme kadranı ── */
+.slot .cd { position: absolute; inset: 0; border-radius: 5px; pointer-events: none; background: rgba(6,3,14,0.6); backdrop-filter: grayscale(1) brightness(0.45);
+  -webkit-mask-image: conic-gradient(from 0deg, transparent calc((1 - var(--r, 0)) * 360deg), #000 0); mask-image: conic-gradient(from 0deg, transparent calc((1 - var(--r, 0)) * 360deg), #000 0); }

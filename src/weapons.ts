@@ -7,7 +7,7 @@ import { rand, TAU } from './util';
 interface Shot { t: number; fn: () => void }
 
 export class WeaponInst {
-  level = 1; cd = 0.2; t = 0; ang = 0; side = 1;
+  level = 1; cd = 0.2; cdMax = 0; t = 0; ang = 0; side = 1;
   queue: Shot[] = []; blades: Sprite[] = []; auraA?: Sprite; auraB?: Sprite;
   constructor(public def: WeaponDef, public slot: number) {}
   get s(): WS { return this.def.stats(this.level); }
@@ -38,10 +38,10 @@ export function updateWeapon(g: Game, w: WeaponInst, dt: number) {
   const cdFull = Math.max(0.12, s.cd * st.cooldown);
 
   switch (k) {
-    case 'proj': if (fireProj(g, w, s, dmg, amount, area)) w.cd = cdFull; else w.cd = 0.12; break;
-    case 'strike': if (fireStrike(g, w, s, dmg, amount, area)) w.cd = cdFull; else w.cd = 0.2; break;
-    case 'nova': fireNova(g, w, s, dmg, area); w.cd = cdFull; break;
-    case 'slash': fireSlash(g, w, s, dmg, amount, area); w.cd = cdFull; break;
+    case 'proj': if (fireProj(g, w, s, dmg, amount, area)) w.cd = w.cdMax = cdFull; else w.cd = 0.12; break;
+    case 'strike': if (fireStrike(g, w, s, dmg, amount, area)) w.cd = w.cdMax = cdFull; else w.cd = 0.2; break;
+    case 'nova': fireNova(g, w, s, dmg, area); w.cd = w.cdMax = cdFull; break;
+    case 'slash': fireSlash(g, w, s, dmg, amount, area); w.cd = w.cdMax = cdFull; break;
   }
 }
 

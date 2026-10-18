@@ -16,7 +16,7 @@ function sprite(a: Anim, scale: number, flip = false): string {
 }
 
 export class UI {
-  root = $('screens'); keyHandler: ((e: KeyboardEvent) => void) | null = null; slotSig = ''; embers = 0;
+  root = $('screens'); keyHandler: ((e: KeyboardEvent) => void) | null = null; slotSig = ''; embers = 0; cdEls: (HTMLElement | null)[] = [];
   constructor(private ctl: Ctl) {}
 
   private clear() { this.root.innerHTML = ''; if (this.keyHandler) { window.removeEventListener('keydown', this.keyHandler); this.keyHandler = null; } }
@@ -57,12 +57,14 @@ export class UI {
           <div class="btn primary" id="b-play">Karanlığa Gir</div>
           <div class="btn" id="b-shop">Güçlendirmeler</div>
           <div class="btn" id="b-help">Nasıl Oynanır</div>
+          <div class="btn" id="b-guide">Silah ve Yetenek Rehberi</div>
         </div>
       </div>
       <div class="menu-foot">En iyi süre ${fmtTime(save.best)} · Toplam ${fmtNum(save.kills)} öldürme · ${save.wins} zafer</div>`);
     s.querySelector('#b-play')!.addEventListener('click', () => this.showMaps());
     s.querySelector('#b-shop')!.addEventListener('click', () => this.showShop());
     s.querySelector('#b-help')!.addEventListener('click', () => this.showHelp());
+    s.querySelector('#b-guide')!.addEventListener('click', () => this.showGuide());
     this.startEmbers(s.querySelector('#embers') as HTMLCanvasElement);
   }
 
@@ -178,6 +180,26 @@ export class UI {
     s.querySelector('#back')!.addEventListener('click', () => this.showMenu());
   }
 
+  // ───────── Silah ve yetenek rehberi ─────────
+  showGuide() {
+    this.clear();
+    const weapons = Object.values(WEAPONS).filter((w) => !w.isEvolved).map((w) => {
+      const ev = w.evolvesTo ? WEAPONS[w.evolvesTo] : null; const p = w.evolveWith ? PASSIVES[w.evolveWith] : null;
+      const evo = ev && p ? `<div class="pe evn">★ ${p.glyph} ${p.name} ile <b>${ev.name}</b>: ${ev.desc}</div>` : '<div class="pe">Evrimi yok.</div>';
+      return `<div class="prow"><div class="slot"><img src="${weaponIconUrl(w.icon)}"/></div><div class="pinfo"><div class="pn">${w.name}</div><div class="pe">${w.desc}</div>${evo}</div></div>`;
+    }).join('');
+    const passives = Object.values(PASSIVES).map((d) => {
+      const users = Object.values(WEAPONS).filter((w) => w.evolveWith === d.id);
+      const evo = users.length ? `<div class="pe evn">Evrim: ${users.map((w) => w.name).join(', ')}</div>` : '';
+      return `<div class="prow"><div class="slot"><span class="g" style="color:${d.color}">${d.glyph}</span></div><div class="pinfo"><div class="pn">${d.name}</div><div class="pe">${d.desc}</div>${evo}</div></div>`;
+    }).join('');
+    const s = this.screen('dim', `<div class="bg" style="opacity:0.55"><div class="fog"></div></div>
+      <div class="panel guide" style="position:relative;text-align:center"><h2 class="h">Silah ve Yetenek Rehberi</h2><div class="divider"></div>
+      <div class="pause-cols guide-cols"><div class="pause-col"><h3>Silahlar</h3>${weapons}</div><div class="pause-col"><h3>Yetenekler</h3>${passives}</div></div>
+      <div class="divider"></div><div class="row"><div class="btn small" id="back">Geri</div></div></div>`);
+    s.querySelector('#back')!.addEventListener('click', () => this.showMenu());
+  }
+
   // ───────── Seviye atlama ─────────
   showLevelUp(opts: Option[], rerolls: number, banishes: number) {
     this.clear(); const g = this.ctl.game; let ban = false;
@@ -226,6 +248,10 @@ export class UI {
     this.clear();
     const g = this.ctl.game;
     const s = this.screen('dim', `<div class="panel pause" style="position:relative;text-align:center"><h2 class="h">Duraklatıldı</h2><div class="divider"></div>
+      <div class="pbars">
+        <div class="pbar hp"><div class="fill" style="width:${Math.max(0, Math.min(100, (g.hp / g.stats.maxHp) * 100))}%"></div><span>♥ Can ${Math.ceil(g.hp)} / ${g.stats.maxHp}</span></div>
+        <div class="pbar xp"><div class="fill" style="width:${Math.max(0, Math.min(100, (g.xp / g.xpNeed) * 100))}%"></div><span>NV ${g.level} · EXP ${Math.floor(g.xp)} / ${g.xpNeed}</span></div>
+      </div>
       <div class="pause-cols"><div class="pause-col"><h3>Silahlar ${g.weapons.length}/${MAX_WEAPONS}</h3>${this.pauseWeapons(g)}</div>
       <div class="pause-col"><h3>Pasifler ${g.passives.size}/${MAX_PASSIVES}</h3>${this.pausePassives(g)}</div></div>
       <div class="divider"></div>
@@ -308,14 +334,23 @@ export class UI {
       $('wslots').innerHTML = Array.from({ length: MAX_WEAPONS }, (_, i) => {
         const w = g.weapons[i]; if (!w) return '<div class="slot empty"></div>';
         const ready = w.def.evolvesTo && w.level >= w.def.maxLevel && w.def.evolveWith && g.passives.has(w.def.evolveWith);
-        return `<div class="slot ${w.def.isEvolved || ready ? 'evo' : ''}"><img src="${weaponIconUrl(w.def.icon)}"/><span class="lv">${w.def.isEvolved ? '★' : w.level >= w.def.maxLevel ? 'MAX' : w.level}</span></div>`;
+        const timed = ['proj', 'strike', 'nova', 'slash'].includes(w.def.kind); // bekleme süresiyle ateş eden silahlar
+        return `<div class="slot ${w.def.isEvolved || ready ? 'evo' : ''}"><img src="${weaponIconUrl(w.def.icon)}"/>${timed ? '<i class="cd"></i>' : ''}<span class="lv">${w.def.isEvolved ? '★' : w.level >= w.def.maxLevel ? 'MAX' : w.level}</span></div>`;
       }).join('');
+      this.cdEls = Array.from({ length: g.weapons.length }, (_, i) => $('wslots').children[i]?.querySelector('.cd') as HTMLElement | null);
       const ps = [...g.passives];
       $('pslots').innerHTML = Array.from({ length: MAX_PASSIVES }, (_, i) => {
         const p = ps[i]; if (!p) return '<div class="slot empty"></div>'; const d = PASSIVES[p[0]];
         return `<div class="slot"><span class="g" style="color:${d.color}">${d.glyph}</span><span class="lv">${p[1]}</span></div>`;
       }).join('');
       $('chesthint').classList.toggle('hidden', g.evolvableCount() === 0);
+    }
+    // bekleme kadranı: silah hazır olana dek koyu bölge saat yönünde açılır; çok hızlı silahlarda titremesin diye gizli
+    for (let i = 0; i < g.weapons.length; i++) {
+      const el = this.cdEls[i]; const w = g.weapons[i]; if (!el) continue;
+      const show = w.cdMax >= 0.5 && w.cd > 0.05;
+      el.style.display = show ? '' : 'none';
+      if (show) el.style.setProperty('--r', Math.min(1, w.cd / w.cdMax).toFixed(3));
     }
     const b = g.boss; const bb = $('bossbar');
     if (b && b.active && !b.dying) {
