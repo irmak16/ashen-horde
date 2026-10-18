@@ -224,10 +224,48 @@ export class UI {
   // ───────── Duraklat ─────────
   showPause() {
     this.clear();
-    const s = this.screen('dim', `<div class="panel" style="position:relative;min-width:340px;text-align:center"><h2 class="h">Duraklatıldı</h2><div class="divider"></div>
+    const g = this.ctl.game;
+    const s = this.screen('dim', `<div class="panel pause" style="position:relative;text-align:center"><h2 class="h">Duraklatıldı</h2><div class="divider"></div>
+      <div class="pause-cols"><div class="pause-col"><h3>Silahlar ${g.weapons.length}/${MAX_WEAPONS}</h3>${this.pauseWeapons(g)}</div>
+      <div class="pause-col"><h3>Pasifler ${g.passives.size}/${MAX_PASSIVES}</h3>${this.pausePassives(g)}</div></div>
+      <div class="divider"></div>
       <div class="menu"><div class="btn primary" id="rs">Devam Et</div><div class="btn" id="sr">Pes Et</div></div></div>`);
     s.querySelector('#rs')!.addEventListener('click', () => this.ctl.resume());
     s.querySelector('#sr')!.addEventListener('click', () => this.ctl.surrender());
+  }
+
+  private pauseWeapons(g: Game): string {
+    if (!g.weapons.length) return '<div class="prow-none">Silah yok</div>';
+    return g.weapons.map((w) => {
+      const d = w.def; const max = w.level >= d.maxLevel;
+      let lv: string; let note: string;
+      if (d.isEvolved) {
+        const base = Object.values(WEAPONS).find((x) => x.evolvesTo === d.id);
+        lv = '★'; note = `<span class="ok">Evrimleşti${base ? ` · ${base.name}` : ''}</span>`;
+      } else if (d.evolvesTo && d.evolveWith) {
+        lv = max ? 'MAX' : `Sv ${w.level}/${d.maxLevel}`;
+        const p = PASSIVES[d.evolveWith]; const has = g.passives.has(d.evolveWith);
+        const need = `<span class="${has ? 'ok' : 'miss'}">${p.glyph} ${p.name} ${has ? '✓' : '✗'}</span>`;
+        const lvNote = `<span class="${max ? 'ok' : 'miss'}">Sv ${d.maxLevel} ${max ? '✓' : '✗'}</span>`;
+        note = max && has ? `<span class="ready">Boss sandığında ${WEAPONS[d.evolvesTo].name} olur</span>` : `Evrim: ${WEAPONS[d.evolvesTo].name} · ${lvNote} · ${need}`;
+      } else { lv = max ? 'MAX' : `Sv ${w.level}/${d.maxLevel}`; note = 'Evrimi yok'; }
+      return `<div class="prow"><div class="slot ${d.isEvolved ? 'evo' : ''}"><img src="${weaponIconUrl(d.icon)}"/></div>
+        <div class="pinfo"><div class="pn">${d.name}<b>${lv}</b></div><div class="pe">${note}</div></div></div>`;
+    }).join('');
+  }
+
+  private pausePassives(g: Game): string {
+    if (!g.passives.size) return '<div class="prow-none">Pasif yok</div>';
+    const ownedWeapon = (base: { id: string; evolvesTo?: string }) => g.weapons.some((w) => w.def.id === base.id || w.def.id === base.evolvesTo);
+    return [...g.passives].map(([id, l]) => {
+      const d = PASSIVES[id];
+      const users = Object.values(WEAPONS).filter((w) => w.evolveWith === id);
+      const note = users.length
+        ? 'Evrim: ' + users.map((w) => `<span class="${ownedWeapon(w) ? 'ok' : 'miss'}">${w.name} ${ownedWeapon(w) ? '✓' : '✗'}</span>`).join(' · ')
+        : 'Evrim bağlantısı yok';
+      return `<div class="prow"><div class="slot"><span class="g" style="color:${d.color}">${d.glyph}</span></div>
+        <div class="pinfo"><div class="pn">${d.name}<b>${l >= d.maxLevel ? 'MAX' : `Sv ${l}/${d.maxLevel}`}</b></div><div class="pe">${d.perLevel} · ${note}</div></div></div>`;
+    }).join('');
   }
 
   // ───────── Sonuç ─────────
@@ -284,5 +322,25 @@ export class UI {
       bb.classList.remove('hidden'); $('bossname').textContent = b.bossName;
       const pct = Math.max(0, Math.round((b.hp / b.maxHp) * 1000) / 10); if (pct !== this.last.boss) { $('bossfill').style.width = pct + '%'; this.last.boss = pct; }
     } else bb.classList.add('hidden');
+    this.updateBossPointer(g);
+  }
+
+  /** Boss ekran dışındaysa ekran kenarında ona doğru dönen kırmızı ok gösterir. */
+  private updateBossPointer(g: Game) {
+    const ptr = $('bossptr'); const b = g.boss;
+    if (!b || !b.active || b.dying || g.state === 'idle') { ptr.classList.add('hidden'); return; }
+    const W = g.app.screen.width, H = g.app.screen.height;
+    const s = g.worldToScreen(b.x, b.y - b.h * 0.4);
+    const pad = 34;
+    if (s.x > -pad && s.x < W + pad && s.y > -pad && s.y < H + pad) { ptr.classList.add('hidden'); return; }
+    const cx = W / 2, cy = H / 2; const dx = s.x - cx, dy = s.y - cy;
+    // merkezden boss'a giden doğrunun, ekran kenarından içeri çekilmiş dikdörtgenle kesişimi
+    const mx = 40, mtop = 80, mbot = 40;
+    const kx = (cx - mx) / Math.max(Math.abs(dx), 1e-6);
+    const ky = (dy < 0 ? cy - mtop : cy - mbot) / Math.max(Math.abs(dy), 1e-6);
+    const k = Math.min(1, kx, ky);
+    const px = cx + dx * k, py = cy + dy * k;
+    ptr.style.transform = `translate(${px}px,${py}px) rotate(${Math.atan2(dy, dx)}rad)`;
+    ptr.classList.remove('hidden');
   }
 }
