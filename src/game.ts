@@ -608,7 +608,7 @@ export class Game {
       if (p.homing) {
         let best: Enemy | null = null; let bd = 220 * 220;
         const n = this.hash.query(p.x, p.y, 220, this.qHit);
-        for (let i = 0; i < n; i++) { const e = this.enemies[this.qHit[i]]; if (e.dying) continue; const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2; if (d < bd) { bd = d; best = e; } }
+        for (let i = 0; i < n; i++) { const e = this.enemies[this.qHit[i]]; if (e.dying || p.hit.includes(e.uid)) continue; const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2; if (d < bd) { bd = d; best = e; } }
         if (best) {
           const sp = Math.hypot(p.vx, p.vy); const want = Math.atan2(best.y - p.y, best.x - p.x); const cur = Math.atan2(p.vy, p.vx);
           let df = want - cur; while (df > Math.PI) df -= TAU; while (df < -Math.PI) df += TAU;
