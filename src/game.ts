@@ -329,7 +329,10 @@ export class Game {
   rollOptions(n: number): Option[] {
     const cand: { o: Option; w: number }[] = [];
     for (const w of this.weapons) if (!w.def.isEvolved && w.level < w.def.maxLevel) cand.push({ o: this.optWeapon(w.def, w.level + 1, false), w: 3 });
-    if (this.weapons.length < MAX_WEAPONS) for (const d of Object.values(WEAPONS)) if (!d.isEvolved && !this.weapons.some((w) => w.def.id === d.id)) cand.push({ o: this.optWeapon(d, 1, true), w: 1 });
+    // evrimleşmiş bir silahın temel hali de "sahip olunan" sayılır
+    const owned = new Set(this.weapons.map((w) => w.def.id));
+    for (const d of Object.values(WEAPONS)) if (d.evolvesTo && owned.has(d.evolvesTo)) owned.add(d.id);
+    if (this.weapons.length < MAX_WEAPONS) for (const d of Object.values(WEAPONS)) if (!d.isEvolved && !owned.has(d.id)) cand.push({ o: this.optWeapon(d, 1, true), w: 1 });
     for (const [id, l] of this.passives) if (l < PASSIVES[id].maxLevel) cand.push({ o: this.optPassive(id, l + 1, false), w: 1.1 });
     if (this.passives.size < MAX_PASSIVES) for (const id of Object.keys(PASSIVES)) if (!this.passives.has(id)) cand.push({ o: this.optPassive(id, 1, true), w: 0.8 });
     const pool = cand.filter((c) => !this.banished.has(c.o.key));
