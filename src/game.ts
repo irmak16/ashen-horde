@@ -213,13 +213,44 @@ export class Game {
     return c.slice(0, k);
   }
 
-  densePoint(px: number, py: number, range: number): { x: number; y: number } {
-    const cand = this.randomEnemies(px, py, range, 8);
-    let best = { x: px + rand(-220, 220), y: py + rand(-160, 160) }; let bn = -1;
-    for (const e of cand) {
-      const n = this.hash.query(e.x, e.y, 100, this.qTmp);
-      if (n > bn) { bn = n; best = { x: e.x, y: e.y }; }
+  /** Menzildeki canlı boss (yoksa null). Şimşek/göktaşı gibi rastgele hedefleyen silahlar ilk atışını buna yöneltir. */
+  bossInRange(x: number, y: number, r: number): Enemy | null {
+    const b = this.boss;
+    return b && b.active && !b.dying && (b.x - x) ** 2 + (b.y - y) ** 2 <= r * r ? b : null;
+  }
+
+  /** (x,y) çevresindeki r yarıçaplı bölgedeki düşmanların toplam canı. Boss sayılmaz: canı yoğunluğu domine eder, ona zaten ilk atış gider. */
+  hpDensity(x: number, y: number, r: number): number {
+    const n = this.hash.query(x, y, r, this.qTmp); const r2 = r * r; let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const e = this.enemies[this.qTmp[i]];
+      if (e.active && !e.dying && !e.boss && (e.x - x) ** 2 + (e.y - y) ** 2 <= r2) sum += e.hp;
     }
+    return sum;
+  }
+
+  /** Menzildeki rastgele aday düşmanlardan, çevresindeki toplam canı en yüksek olanları seçer (birbirinden en az minSep uzakta). */
+  hpTargets(x: number, y: number, range: number, k: number, minSep: number, exclude?: Enemy): Enemy[] {
+    if (k <= 0) return [];
+    const scored = this.randomEnemies(x, y, range, 24).filter((e) => e !== exclude)
+      .map((e) => ({ e, s: this.hpDensity(e.x, e.y, 100) })).sort((a, b) => b.s - a.s);
+    const out: Enemy[] = []; const sep2 = minSep * minSep;
+    for (const c of scored) {
+      if (out.length >= k) break;
+      if (out.every((o) => (o.x - c.e.x) ** 2 + (o.y - c.e.y) ** 2 >= sep2)) out.push(c.e);
+    }
+    for (const c of scored) { if (out.length >= k) break; if (!out.includes(c.e)) out.push(c.e); }
+    return out;
+  }
+
+  densePoint(px: number, py: number, range: number): { x: number; y: number } {
+    const cand = this.randomEnemies(px, py, range, 10).filter((e) => !e.boss);
+    let best = { x: px + rand(-220, 220), y: py + rand(-160, 160) }; let bs = -1;
+    for (const e of cand) {
+      const s = this.hpDensity(e.x, e.y, 100);
+      if (s > bs) { bs = s; best = { x: e.x, y: e.y }; }
+    }
+    if (bs < 0) { const b = this.bossInRange(px, py, range); if (b) return { x: b.x, y: b.y }; } // boss'tan başka düşman yoksa boş yere düşmesin
     return best;
   }
 

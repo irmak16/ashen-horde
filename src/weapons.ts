@@ -144,7 +144,10 @@ function updateAura(g: Game, w: WeaponInst, s: WS, dmg: number, area: number, dt
 function fireStrike(g: Game, w: WeaponInst, s: WS, dmg: number, amount: number, area: number): boolean {
   const p = g.player; const tint = w.def.tint ?? 0xffffff;
   if (s.mode === 0) {
-    const targets = g.randomEnemies(p.x, p.y, 560, amount);
+    // menzilde boss varsa ilk şimşek ona düşer, kalanlar toplam can yoğunluğuna göre seçilir
+    const boss = g.bossInRange(p.x, p.y, 560);
+    const targets = g.hpTargets(p.x, p.y, 560, boss ? amount - 1 : amount, 70, boss ?? undefined);
+    if (boss) { if (!targets.length) for (let i = 0; i < amount; i++) targets.push(boss); else targets.unshift(boss); } // boss'tan başka düşman yoksa hepsi boss'a
     if (!targets.length) return false;
     targets.forEach((t, i) => w.queue.push({
       t: i * 0.09, fn: () => {
@@ -167,9 +170,13 @@ function fireStrike(g: Game, w: WeaponInst, s: WS, dmg: number, amount: number, 
   }
   // göktaşı
   const R = s.radius * area;
+  const boss = g.bossInRange(p.x, p.y, 480);
   for (let i = 0; i < amount; i++) {
-    const c = g.densePoint(p.x, p.y, 480);
-    const x = c.x + rand(-26, 26), y = c.y + rand(-26, 26);
+    // menzilde boss varsa ilk göktaşı ona düşer, kalanlar toplam can yoğunluğuna göre seçilir
+    const first = i === 0 ? boss : null;
+    const c = first ? { x: first.x, y: first.y } : g.densePoint(p.x, p.y, 480);
+    const j = first ? 10 : 26;
+    const x = c.x + rand(-j, j), y = c.y + rand(-j, j);
     w.queue.push({
       t: i * 0.16, fn: () => {
         g.fx.ring(x, y, 8, R, { dur: 0.62, tint: 0xff6a3a, a0: 0.8, low: true });
