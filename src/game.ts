@@ -12,6 +12,8 @@ import { WeaponInst, updateWeapon } from './weapons';
 
 const MAX_ENEMIES = 900;
 const MAX_ITEMS = 700;
+// Toplanmayan eşyalar (elmas/altın/kalp) yanıp sönerek ITEM_FADE_TIME sn'de silinir: ya ITEM_LIFETIME sn boyunca toplanmadıysa ya da oyuncudan ekran kenarı + ITEM_FAR_PAD kadar uzakta ITEM_FAR_GRACE sn kaldıysa.
+const ITEM_FAR_PAD = 250, ITEM_FAR_GRACE = 4, ITEM_FADE_TIME = 1.5, ITEM_LIFETIME = 60;
 
 export class Enemy {
   idx = 0; uid = 0; active = false; dying = false; def!: EnemyDef; x = 0; y = 0; hp = 1; maxHp = 1; dmg = 1; speed = 1; r = 10;
@@ -26,7 +28,7 @@ interface Proj {
   active: boolean; x: number; y: number; vx: number; vy: number; dmg: number; pierce: number; life: number; r: number; homing: number;
   trail: number; hit: number[]; sprite: Sprite; rot: boolean; spin: number; boom: number; ret: boolean; maxLife: number; turned: boolean; tint: number;
 }
-interface Item { active: boolean; kind: 'gem' | 'coin' | 'chest' | 'heart'; value: number; x: number; y: number; vx: number; vy: number; magnet: boolean; sprite: Sprite; t: number }
+interface Item { active: boolean; kind: 'gem' | 'coin' | 'chest' | 'heart'; value: number; x: number; y: number; vx: number; vy: number; magnet: boolean; sprite: Sprite; t: number; far: number; fade: number }
 
 export interface Option { key: string; kind: 'weapon' | 'passive' | 'heal' | 'gold'; id: string; isNew: boolean; level: number; name: string; desc: string; icon?: string; glyph?: string; color?: string }
 export interface ChestResult { evolved: { from: WeaponDef; to: WeaponDef }[]; upgrades: Option[] }
@@ -181,9 +183,9 @@ export class Game {
     if (!it) {
       if (this.items.length >= MAX_ITEMS) { if (kind === 'gem') this.addXp(value); return; }
       const s = new Sprite(); s.anchor.set(0.5); this.layers.items.addChild(s);
-      it = { active: false, kind, value, x, y, vx: 0, vy: 0, magnet: false, sprite: s, t: 0 }; this.items.push(it);
+      it = { active: false, kind, value, x, y, vx: 0, vy: 0, magnet: false, sprite: s, t: 0, far: 0, fade: 0 }; this.items.push(it);
     }
-    it.active = true; it.kind = kind; it.value = value; it.x = x; it.y = y; it.magnet = false; it.t = 0;
+    it.active = true; it.kind = kind; it.value = value; it.x = x; it.y = y; it.magnet = false; it.t = 0; it.far = 0; it.fade = 0;
     const a = rand(TAU), sp = rand(0.3, 1) * scatter * 3; it.vx = Math.cos(a) * sp; it.vy = Math.sin(a) * sp;
     const s = it.sprite; s.visible = true; s.alpha = 1; s.rotation = 0;
     if (kind === 'gem') { s.texture = A.gems[value >= 25 ? 2 : value >= 5 ? 1 : 0]; s.scale.set(0.55 + Math.min(0.5, value / 80)); s.anchor.set(0.5); }
@@ -213,13 +215,44 @@ export class Game {
     return c.slice(0, k);
   }
 
-  densePoint(px: number, py: number, range: number): { x: number; y: number } {
-    const cand = this.randomEnemies(px, py, range, 8);
-    let best = { x: px + rand(-220, 220), y: py + rand(-160, 160) }; let bn = -1;
-    for (const e of cand) {
-      const n = this.hash.query(e.x, e.y, 100, this.qTmp);
-      if (n > bn) { bn = n; best = { x: e.x, y: e.y }; }
+  /** Menzildeki canlı boss (yoksa null). Şimşek/göktaşı gibi rastgele hedefleyen silahlar ilk atışını buna yöneltir. */
+  bossInRange(x: number, y: number, r: number): Enemy | null {
+    const b = this.boss;
+    return b && b.active && !b.dying && (b.x - x) ** 2 + (b.y - y) ** 2 <= r * r ? b : null;
+  }
+
+  /** (x,y) çevresindeki r yarıçaplı bölgedeki düşmanların toplam canı. Boss sayılmaz: canı yoğunluğu domine eder, ona zaten ilk atış gider. */
+  hpDensity(x: number, y: number, r: number): number {
+    const n = this.hash.query(x, y, r, this.qTmp); const r2 = r * r; let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const e = this.enemies[this.qTmp[i]];
+      if (e.active && !e.dying && !e.boss && (e.x - x) ** 2 + (e.y - y) ** 2 <= r2) sum += e.hp;
     }
+    return sum;
+  }
+
+  /** Menzildeki rastgele aday düşmanlardan, çevresindeki toplam canı en yüksek olanları seçer (birbirinden en az minSep uzakta). */
+  hpTargets(x: number, y: number, range: number, k: number, minSep: number, exclude?: Enemy): Enemy[] {
+    if (k <= 0) return [];
+    const scored = this.randomEnemies(x, y, range, 24).filter((e) => e !== exclude)
+      .map((e) => ({ e, s: this.hpDensity(e.x, e.y, 100) })).sort((a, b) => b.s - a.s);
+    const out: Enemy[] = []; const sep2 = minSep * minSep;
+    for (const c of scored) {
+      if (out.length >= k) break;
+      if (out.every((o) => (o.x - c.e.x) ** 2 + (o.y - c.e.y) ** 2 >= sep2)) out.push(c.e);
+    }
+    for (const c of scored) { if (out.length >= k) break; if (!out.includes(c.e)) out.push(c.e); }
+    return out;
+  }
+
+  densePoint(px: number, py: number, range: number): { x: number; y: number } {
+    const cand = this.randomEnemies(px, py, range, 10).filter((e) => !e.boss);
+    let best = { x: px + rand(-220, 220), y: py + rand(-160, 160) }; let bs = -1;
+    for (const e of cand) {
+      const s = this.hpDensity(e.x, e.y, 100);
+      if (s > bs) { bs = s; best = { x: e.x, y: e.y }; }
+    }
+    if (bs < 0) { const b = this.bossInRange(px, py, range); if (b) return { x: b.x, y: b.y }; } // boss'tan başka düşman yoksa boş yere düşmesin
     return best;
   }
 
@@ -329,7 +362,10 @@ export class Game {
   rollOptions(n: number): Option[] {
     const cand: { o: Option; w: number }[] = [];
     for (const w of this.weapons) if (!w.def.isEvolved && w.level < w.def.maxLevel) cand.push({ o: this.optWeapon(w.def, w.level + 1, false), w: 3 });
-    if (this.weapons.length < MAX_WEAPONS) for (const d of Object.values(WEAPONS)) if (!d.isEvolved && !this.weapons.some((w) => w.def.id === d.id)) cand.push({ o: this.optWeapon(d, 1, true), w: 1 });
+    // evrimleşmiş bir silahın temel hali de "sahip olunan" sayılır
+    const owned = new Set(this.weapons.map((w) => w.def.id));
+    for (const d of Object.values(WEAPONS)) if (d.evolvesTo && owned.has(d.evolvesTo)) owned.add(d.id);
+    if (this.weapons.length < MAX_WEAPONS) for (const d of Object.values(WEAPONS)) if (!d.isEvolved && !owned.has(d.id)) cand.push({ o: this.optWeapon(d, 1, true), w: 1 });
     for (const [id, l] of this.passives) if (l < PASSIVES[id].maxLevel) cand.push({ o: this.optPassive(id, l + 1, false), w: 1.1 });
     if (this.passives.size < MAX_PASSIVES) for (const id of Object.keys(PASSIVES)) if (!this.passives.has(id)) cand.push({ o: this.optPassive(id, 1, true), w: 0.8 });
     const pool = cand.filter((c) => !this.banished.has(c.o.key));
@@ -570,9 +606,9 @@ export class Game {
       p.life -= dt;
       if (p.life <= 0) { p.active = false; p.sprite.visible = false; continue; }
       if (p.homing) {
-        let best: Enemy | null = null; let bd = 360 * 360;
-        const n = this.hash.query(p.x, p.y, 360, this.qHit);
-        for (let i = 0; i < n; i++) { const e = this.enemies[this.qHit[i]]; if (e.dying) continue; const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2; if (d < bd) { bd = d; best = e; } }
+        let best: Enemy | null = null; let bd = 220 * 220;
+        const n = this.hash.query(p.x, p.y, 220, this.qHit);
+        for (let i = 0; i < n; i++) { const e = this.enemies[this.qHit[i]]; if (e.dying || p.hit.includes(e.uid)) continue; const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2; if (d < bd) { bd = d; best = e; } }
         if (best) {
           const sp = Math.hypot(p.vx, p.vy); const want = Math.atan2(best.y - p.y, best.x - p.x); const cur = Math.atan2(p.vy, p.vx);
           let df = want - cur; while (df > Math.PI) df -= TAU; while (df < -Math.PI) df += TAU;
@@ -609,6 +645,7 @@ export class Game {
   // ───────────── Eşyalar ─────────────
   private updateItems(dt: number) {
     const p = this.player; const mag = this.stats.magnet;
+    const farR = Math.hypot(this.app.screen.width, this.app.screen.height) / 2 / this.zoom + ITEM_FAR_PAD;
     for (const it of this.items) {
       if (!it.active) continue;
       it.t += dt;
@@ -618,6 +655,18 @@ export class Game {
         it.sprite.position.set(it.x, it.y + Math.sin(it.t * 3) * 3); it.sprite.zIndex = it.y; continue;
       }
       if (!it.magnet && d < mag * (it.kind === 'heart' ? 0.5 : 1)) it.magnet = true;
+      if (it.magnet) {
+        if (it.fade > 0) { it.fade = 0; it.sprite.alpha = 1; } // silinmeye giderken yakalandı: kurtarıldı
+      } else {
+        const expired = it.t > ITEM_LIFETIME;
+        if (d > farR) it.far += dt; else it.far = 0;
+        if (expired || it.far > ITEM_FAR_GRACE) {
+          it.fade += dt;
+          if (it.fade >= ITEM_FADE_TIME) { it.active = false; it.sprite.visible = false; it.sprite.alpha = 1; continue; }
+          // silinmeden önce yanıp söner ve soluklaşır
+          it.sprite.alpha = (1 - it.fade / ITEM_FADE_TIME) * (Math.sin(it.fade * 38) > 0 ? 1 : 0.35);
+        } else if (it.fade > 0) { it.fade = 0; it.sprite.alpha = 1; }
+      }
       if (it.magnet) {
         const sp = 260 + it.t * 40 + Math.max(0, 200 - d) * 3; it.x += (dx / d) * sp * dt; it.y += (dy / d) * sp * dt;
         if (d < 18) {

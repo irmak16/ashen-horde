@@ -7,7 +7,7 @@ import { rand, TAU } from './util';
 interface Shot { t: number; fn: () => void }
 
 export class WeaponInst {
-  level = 1; cd = 0.2; t = 0; ang = 0; side = 1;
+  level = 1; cd = 0.2; cdMax = 0; t = 0; ang = 0; side = 1;
   queue: Shot[] = []; blades: Sprite[] = []; auraA?: Sprite; auraB?: Sprite;
   constructor(public def: WeaponDef, public slot: number) {}
   get s(): WS { return this.def.stats(this.level); }
@@ -38,10 +38,10 @@ export function updateWeapon(g: Game, w: WeaponInst, dt: number) {
   const cdFull = Math.max(0.12, s.cd * st.cooldown);
 
   switch (k) {
-    case 'proj': if (fireProj(g, w, s, dmg, amount, area)) w.cd = cdFull; else w.cd = 0.12; break;
-    case 'strike': if (fireStrike(g, w, s, dmg, amount, area)) w.cd = cdFull; else w.cd = 0.2; break;
-    case 'nova': fireNova(g, w, s, dmg, area); w.cd = cdFull; break;
-    case 'slash': fireSlash(g, w, s, dmg, amount, area); w.cd = cdFull; break;
+    case 'proj': if (fireProj(g, w, s, dmg, amount, area)) w.cd = w.cdMax = cdFull; else w.cd = 0.12; break;
+    case 'strike': if (fireStrike(g, w, s, dmg, amount, area)) w.cd = w.cdMax = cdFull; else w.cd = 0.2; break;
+    case 'nova': fireNova(g, w, s, dmg, area); w.cd = w.cdMax = cdFull; break;
+    case 'slash': fireSlash(g, w, s, dmg, amount, area); w.cd = w.cdMax = cdFull; break;
   }
 }
 
@@ -53,7 +53,7 @@ function fireProj(g: Game, w: WeaponInst, s: WS, dmg: number, amount: number, ar
   const speed = s.speed * g.stats.projSpeed;
   const icon = A.weapon[w.def.icon];
   const shoot = (ang: number) => {
-    const o = { x: p.x, y: p.y - 22, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, dmg, pierce: s.pierce, life: 2.0, r: 13 * area, tex: A.orb, scale: 0.55 * area, tint, add: true, homing: s.homing ? 6 : 0, trail: tint, rot: false } as Parameters<Game['spawnProj']>[0];
+    const o = { x: p.x, y: p.y - 22, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, dmg, pierce: s.pierce, life: s.life ?? 2.0, r: 13 * area, tex: A.orb, scale: 0.55 * area, tint, add: true, homing: s.homing ? 6 : 0, trail: tint, rot: false } as Parameters<Game['spawnProj']>[0];
     if (kind === 'dagger') Object.assign(o, { life: 1.3, r: 12 * area, tex: icon, scale: (50 / icon.width) * (0.9 + area * 0.1), tint: 0xffffff, add: false, trail: 0, rot: true });
     else if (kind === 'spear') Object.assign(o, { life: 1.9, r: 18 * area, tex: icon, scale: (78 / icon.width) * (0.9 + area * 0.1), tint: 0xffffff, add: false, trail: tint, rot: true, ret: true });
     else if (kind === 'arrow') Object.assign(o, { life: 1.7, r: 9 * area, tex: A.arrow, scale: 0.95 * (0.9 + area * 0.1), tint: 0xffffff, add: false, trail: 0, rot: true });
@@ -69,7 +69,7 @@ function fireProj(g: Game, w: WeaponInst, s: WS, dmg: number, amount: number, ar
     }
     return true;
   }
-  const range = kind === 'arrow' ? 900 : 680;
+  const range = kind === 'arrow' ? 900 : kind === 'orb' ? 520 : 680; // 'orb' = Gizemli Ok / Yıldız Yağmuru
   let targets = g.nearestEnemies(p.x, p.y, range, kind === 'arrow' ? 40 : Math.max(1, amount));
   if (kind === 'arrow') targets = targets.sort(() => Math.random() - 0.5); // menzilin tamamını kullan: rastgele hedef
   if (!targets.length && !s.radial) return false;
@@ -144,7 +144,10 @@ function updateAura(g: Game, w: WeaponInst, s: WS, dmg: number, area: number, dt
 function fireStrike(g: Game, w: WeaponInst, s: WS, dmg: number, amount: number, area: number): boolean {
   const p = g.player; const tint = w.def.tint ?? 0xffffff;
   if (s.mode === 0) {
-    const targets = g.randomEnemies(p.x, p.y, 560, amount);
+    // menzilde boss varsa ilk şimşek ona düşer, kalanlar toplam can yoğunluğuna göre seçilir
+    const boss = g.bossInRange(p.x, p.y, 560);
+    const targets = g.hpTargets(p.x, p.y, 560, boss ? amount - 1 : amount, 70, boss ?? undefined);
+    if (boss) { if (!targets.length) for (let i = 0; i < amount; i++) targets.push(boss); else targets.unshift(boss); } // boss'tan başka düşman yoksa hepsi boss'a
     if (!targets.length) return false;
     targets.forEach((t, i) => w.queue.push({
       t: i * 0.09, fn: () => {
@@ -167,9 +170,13 @@ function fireStrike(g: Game, w: WeaponInst, s: WS, dmg: number, amount: number, 
   }
   // göktaşı
   const R = s.radius * area;
+  const boss = g.bossInRange(p.x, p.y, 480);
   for (let i = 0; i < amount; i++) {
-    const c = g.densePoint(p.x, p.y, 480);
-    const x = c.x + rand(-26, 26), y = c.y + rand(-26, 26);
+    // menzilde boss varsa ilk göktaşı ona düşer, kalanlar toplam can yoğunluğuna göre seçilir
+    const first = i === 0 ? boss : null;
+    const c = first ? { x: first.x, y: first.y } : g.densePoint(p.x, p.y, 480);
+    const j = first ? 10 : 26;
+    const x = c.x + rand(-j, j), y = c.y + rand(-j, j);
     w.queue.push({
       t: i * 0.16, fn: () => {
         g.fx.ring(x, y, 8, R, { dur: 0.62, tint: 0xff6a3a, a0: 0.8, low: true });

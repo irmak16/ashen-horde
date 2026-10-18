@@ -59,7 +59,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   astral_barrage: {
     id: 'astral_barrage', name: 'Yıldız Yağmuru', icon: 'legend_staff_12', kind: 'proj', maxLevel: 1, isEvolved: true, tint: 0xffe08a,
     desc: 'Her yöne yıldız okları yağdırır, düşmanları takip eder.',
-    stats: () => S({ dmg: 38, cd: 0.8, amount: 4, speed: 520, pierce: 4, radial: 8, homing: 1 }), notes: [],
+    stats: () => S({ dmg: 38, cd: 0.8, amount: 4, speed: 520, pierce: 4, radial: 4, homing: 1, life: 1.2 }), notes: [],
   },
   throwing_daggers: {
     id: 'throwing_daggers', name: 'Fırlatma Bıçakları', icon: 'dagger_12', kind: 'proj', maxLevel: 8, tint: 0xd8e6ff,
