@@ -53,7 +53,7 @@ function fireProj(g: Game, w: WeaponInst, s: WS, dmg: number, amount: number, ar
   const speed = s.speed * g.stats.projSpeed;
   const icon = A.weapon[w.def.icon];
   const shoot = (ang: number) => {
-    const o = { x: p.x, y: p.y - 22, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, dmg, pierce: s.pierce, life: 2.0, r: 13 * area, tex: A.orb, scale: 0.55 * area, tint, add: true, homing: s.homing ? 6 : 0, trail: tint, rot: false } as Parameters<Game['spawnProj']>[0];
+    const o = { x: p.x, y: p.y - 22, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, dmg, pierce: s.pierce, life: s.life ?? 2.0, r: 13 * area, tex: A.orb, scale: 0.55 * area, tint, add: true, homing: s.homing ? 6 : 0, trail: tint, rot: false } as Parameters<Game['spawnProj']>[0];
     if (kind === 'dagger') Object.assign(o, { life: 1.3, r: 12 * area, tex: icon, scale: (50 / icon.width) * (0.9 + area * 0.1), tint: 0xffffff, add: false, trail: 0, rot: true });
     else if (kind === 'spear') Object.assign(o, { life: 1.9, r: 18 * area, tex: icon, scale: (78 / icon.width) * (0.9 + area * 0.1), tint: 0xffffff, add: false, trail: tint, rot: true, ret: true });
     else if (kind === 'arrow') Object.assign(o, { life: 1.7, r: 9 * area, tex: A.arrow, scale: 0.95 * (0.9 + area * 0.1), tint: 0xffffff, add: false, trail: 0, rot: true });
@@ -69,7 +69,7 @@ function fireProj(g: Game, w: WeaponInst, s: WS, dmg: number, amount: number, ar
     }
     return true;
   }
-  const range = kind === 'arrow' ? 900 : 680;
+  const range = kind === 'arrow' ? 900 : kind === 'orb' ? 520 : 680; // 'orb' = Gizemli Ok / Yıldız Yağmuru
   let targets = g.nearestEnemies(p.x, p.y, range, kind === 'arrow' ? 40 : Math.max(1, amount));
   if (kind === 'arrow') targets = targets.sort(() => Math.random() - 0.5); // menzilin tamamını kullan: rastgele hedef
   if (!targets.length && !s.radial) return false;

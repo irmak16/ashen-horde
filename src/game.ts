@@ -606,8 +606,8 @@ export class Game {
       p.life -= dt;
       if (p.life <= 0) { p.active = false; p.sprite.visible = false; continue; }
       if (p.homing) {
-        let best: Enemy | null = null; let bd = 360 * 360;
-        const n = this.hash.query(p.x, p.y, 360, this.qHit);
+        let best: Enemy | null = null; let bd = 220 * 220;
+        const n = this.hash.query(p.x, p.y, 220, this.qHit);
         for (let i = 0; i < n; i++) { const e = this.enemies[this.qHit[i]]; if (e.dying) continue; const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2; if (d < bd) { bd = d; best = e; } }
         if (best) {
           const sp = Math.hypot(p.vx, p.vy); const want = Math.atan2(best.y - p.y, best.x - p.x); const cur = Math.atan2(p.vy, p.vx);
