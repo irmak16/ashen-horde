@@ -12,8 +12,8 @@ import { WeaponInst, updateWeapon } from './weapons';
 
 const MAX_ENEMIES = 900;
 const MAX_ITEMS = 700;
-// Toplanmayan eşyalar (elmas/altın/kalp) oyuncudan ekran kenarı + ITEM_FAR_PAD kadar uzaklaşınca ITEM_FAR_GRACE sn sonra yanıp sönerek ITEM_FADE_TIME sn'de silinir.
-const ITEM_FAR_PAD = 250, ITEM_FAR_GRACE = 4, ITEM_FADE_TIME = 1.5;
+// Toplanmayan eşyalar (elmas/altın/kalp) yanıp sönerek ITEM_FADE_TIME sn'de silinir: ya ITEM_LIFETIME sn boyunca toplanmadıysa ya da oyuncudan ekran kenarı + ITEM_FAR_PAD kadar uzakta ITEM_FAR_GRACE sn kaldıysa.
+const ITEM_FAR_PAD = 250, ITEM_FAR_GRACE = 4, ITEM_FADE_TIME = 1.5, ITEM_LIFETIME = 15;
 
 export class Enemy {
   idx = 0; uid = 0; active = false; dying = false; def!: EnemyDef; x = 0; y = 0; hp = 1; maxHp = 1; dmg = 1; speed = 1; r = 10;
@@ -655,16 +655,17 @@ export class Game {
         it.sprite.position.set(it.x, it.y + Math.sin(it.t * 3) * 3); it.sprite.zIndex = it.y; continue;
       }
       if (!it.magnet && d < mag * (it.kind === 'heart' ? 0.5 : 1)) it.magnet = true;
-      if (!it.magnet) {
-        if (d > farR) {
-          it.far += dt;
-          if (it.far > ITEM_FAR_GRACE) {
-            it.fade += dt;
-            if (it.fade >= ITEM_FADE_TIME) { it.active = false; it.sprite.visible = false; it.sprite.alpha = 1; continue; }
-            // silinmeden önce yanıp söner ve soluklaşır
-            it.sprite.alpha = (1 - it.fade / ITEM_FADE_TIME) * (Math.sin(it.fade * 38) > 0 ? 1 : 0.35);
-          }
-        } else if (it.far > 0) { it.far = 0; it.fade = 0; it.sprite.alpha = 1; }
+      if (it.magnet) {
+        if (it.fade > 0) { it.fade = 0; it.sprite.alpha = 1; } // silinmeye giderken yakalandı: kurtarıldı
+      } else {
+        const expired = it.t > ITEM_LIFETIME;
+        if (d > farR) it.far += dt; else it.far = 0;
+        if (expired || it.far > ITEM_FAR_GRACE) {
+          it.fade += dt;
+          if (it.fade >= ITEM_FADE_TIME) { it.active = false; it.sprite.visible = false; it.sprite.alpha = 1; continue; }
+          // silinmeden önce yanıp söner ve soluklaşır
+          it.sprite.alpha = (1 - it.fade / ITEM_FADE_TIME) * (Math.sin(it.fade * 38) > 0 ? 1 : 0.35);
+        } else if (it.fade > 0) { it.fade = 0; it.sprite.alpha = 1; }
       }
       if (it.magnet) {
         const sp = 260 + it.t * 40 + Math.max(0, 200 - d) * 3; it.x += (dx / d) * sp * dt; it.y += (dy / d) * sp * dt;
