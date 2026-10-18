@@ -13,7 +13,7 @@ import { WeaponInst, updateWeapon } from './weapons';
 const MAX_ENEMIES = 900;
 const MAX_ITEMS = 700;
 // Toplanmayan eşyalar (elmas/altın/kalp) yanıp sönerek ITEM_FADE_TIME sn'de silinir: ya ITEM_LIFETIME sn boyunca toplanmadıysa ya da oyuncudan ekran kenarı + ITEM_FAR_PAD kadar uzakta ITEM_FAR_GRACE sn kaldıysa.
-const ITEM_FAR_PAD = 250, ITEM_FAR_GRACE = 4, ITEM_FADE_TIME = 1.5, ITEM_LIFETIME = 15;
+const ITEM_FAR_PAD = 250, ITEM_FAR_GRACE = 4, ITEM_FADE_TIME = 1.5, ITEM_LIFETIME = 60;
 
 export class Enemy {
   idx = 0; uid = 0; active = false; dying = false; def!: EnemyDef; x = 0; y = 0; hp = 1; maxHp = 1; dmg = 1; speed = 1; r = 10;
